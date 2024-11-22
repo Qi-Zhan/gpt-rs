@@ -17,28 +17,15 @@ struct GPT2 {
     config: GPT2Config,
     /// the weights (parameters) of the model, and the optimizer
     params: ParameterTensors,
-    /// gradients of the weights
-    grads: ParameterTensors,
-    /// buffers for the AdamW optimizer
-    m_memory: Vec<f32>,
-    v_memory: Vec<f32>,
     /// the activations of the model
     acts: ActivationTensors,
     act_sizes: [usize; NUM_ACTIVATION_TENSORS],
     num_activations: usize,
-    /// gradients of the activations
-    grads_acts: ActivationTensors,
     // other run state configuration
     /// the batch size (B) of current forward pass
     batch_size: usize,
     /// the sequence length (T) of current forward pass
     seq_len: usize,
-    /// the input tokens for the current forward pass
-    inputs: Vec<u32>,
-    /// the target tokens for the current forward pass
-    targets: Vec<u32>,
-    /// after a forward pass with targets, will be populated with the mean loss
-    mean_loss: f32,
 }
 
 impl GPT2 {
@@ -69,7 +56,6 @@ impl GPT2 {
         let C = model_header[6] as usize;
 
         let config = GPT2Config {
-            max_seq_len: maxT,
             vocab_size: V,
             num_layers: L,
             num_heads: NH,
@@ -113,18 +99,11 @@ impl GPT2 {
         GPT2 {
             config,
             params,
-            grads: ParameterTensors::default(),
-            m_memory: Vec::new(),
-            v_memory: Vec::new(),
             acts: ActivationTensors::default(),
             act_sizes: [0; NUM_ACTIVATION_TENSORS],
             num_activations: 0,
-            grads_acts: ActivationTensors::default(),
             batch_size: 0,
             seq_len: 0,
-            inputs: Vec::new(),
-            targets: Vec::new(),
-            mean_loss: -1.0,
         }
     }
 
@@ -266,8 +245,6 @@ impl GPT2 {
 }
 
 struct GPT2Config {
-    /// max sequence length, e.g. 1024
-    max_seq_len: usize,
     /// vocab size, e.g. 50257
     vocab_size: usize,
     /// number of layers, e.g. 12
@@ -278,7 +255,6 @@ struct GPT2Config {
     channels: usize,
 }
 
-#[derive(Default)]
 struct ParameterTensors {
     /// (V, C)
     wte: Vec<f32>,
@@ -409,8 +385,6 @@ struct ActivationTensors {
     logits: Vec<f32>,
     /// (B, T, V)
     probs: Vec<f32>,
-    /// (B, T)
-    losses: Vec<f32>,
 }
 
 impl ActivationTensors {
@@ -438,7 +412,6 @@ impl ActivationTensors {
             lnf_rstd: vec![0.0; act_sizes[19]],
             logits: vec![0.0; act_sizes[20]],
             probs: vec![0.0; act_sizes[21]],
-            losses: vec![0.0; act_sizes[22]],
         }
     }
 }
