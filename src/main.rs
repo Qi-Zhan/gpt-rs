@@ -311,8 +311,7 @@ impl ParameterTensors {
             lnfw: Vec::new(),
             lnfb: Vec::new(),
         };
-        for i in 0..NUM_PARAMETER_TENSORS {
-            let size = param_sizes[i];
+        for (i, size) in param_sizes.iter().enumerate() {
             let slice = &params[offset..offset + size];
             offset += size;
             match i {
@@ -455,18 +454,9 @@ fn layernorm_forward(
             // seed to the input position inp[b, t, :]
             let x = &inp[b * T * C + t * C..];
             // calculate the mean
-            let mut m = 0.0;
-            for i in 0..C {
-                m += x[i];
-            }
-            m /= C as f32;
+            let m = x.iter().take(C).sum::<f32>() / C as f32;
             // calculate the variance
-            let mut v = 0.0;
-            for i in 0..C {
-                let xshift = x[i] - m;
-                v += xshift * xshift;
-            }
-            v /= C as f32;
+            let v = x.iter().take(C).map(|v| (v - m) * (v - m)).sum::<f32>() / C as f32;
             // calculate the rstd
             let s = 1.0 / (v + eps).sqrt();
             // calculate the output
@@ -498,10 +488,10 @@ fn softmax_forward(probs: &mut [f32], logits: &[f32], B: usize, T: usize, V: usi
             let probs_bt = &mut probs[b * T * V + t * V..];
 
             // maxval is only calculated to avoid numerical instability
-            let mut maxval = f32::NEG_INFINITY;
-            for i in 0..V {
-                maxval = maxval.max(logits_bt[i]);
-            }
+            let maxval = logits_bt
+                .iter()
+                .take(V)
+                .fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 
             let mut sum = 0.0;
             for i in 0..V {
@@ -509,9 +499,7 @@ fn softmax_forward(probs: &mut [f32], logits: &[f32], B: usize, T: usize, V: usi
                 sum += probs_bt[i];
             }
 
-            for i in 0..V {
-                probs_bt[i] /= sum;
-            }
+            probs_bt.iter_mut().take(V).for_each(|p| *p /= sum);
         }
     }
 }
@@ -603,18 +591,18 @@ fn attention_forward(
                 let expsum_inv = if expsum == 0.0 { 0.0 } else { 1.0 / expsum };
 
                 // pass 3: normalize to get the softmax
-                for t2 in 0..T {
+                for (t2, item) in att_bth.iter_mut().enumerate().take(T) {
                     if t2 <= t {
-                        att_bth[t2] *= expsum_inv;
+                        *item *= expsum_inv;
                     } else {
-                        att_bth[t2] = 0.0;
+                        *item = 0.0;
                     }
                 }
 
                 // pass 4: accumulate weighted values into the output of attention
                 let out_bth = &mut out[b * T * C + t * C + h * hs..];
-                for i in 0..hs {
-                    out_bth[i] = 0.0;
+                for i in out_bth.iter_mut().take(hs) {
+                    *i = 0.0;
                 }
                 for t2 in 0..=t {
                     let valut_t2 = &inp[b * T * C3 + t2 * C3 + h * hs + 2 * C..];
@@ -631,8 +619,8 @@ fn attention_forward(
 fn sample_mult(probabilities: &[f32], n: usize) -> usize {
     let mut cdf = 0.0;
     let coin = 0.5;
-    for i in 0..n {
-        cdf += probabilities[i];
+    for (i, item) in probabilities.iter().enumerate().take(n) {
+        cdf += *item;
         if cdf >= coin {
             return i;
         }
@@ -641,7 +629,6 @@ fn sample_mult(probabilities: &[f32], n: usize) -> usize {
 }
 
 fn main() {
-    // read command line arguments as strings
     let mut args = std::env::args().skip(1);
     let command = args.next().expect("No command provided");
 
