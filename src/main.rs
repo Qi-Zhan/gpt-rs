@@ -6,6 +6,8 @@ use std::{
     io::{Read, Write},
 };
 
+#[cfg(not(feature = "noparallel"))]
+use rayon::prelude::*;
 use tiktoken_rs::r50k_base;
 
 const N: usize = 10;
@@ -199,7 +201,6 @@ impl GPT2 {
             );
             matmul_forward(l_qkv, l_ln1, l_qkvw, Some(l_qkvb), B, T, C, 3 * C);
             attention_forward(l_atty, l_preatt, l_att, l_qkv, B, T, C, NH);
-            // println!("residual3: {:?}", l_atty[0..10].to_vec());
             matmul_forward(l_attproj, l_atty, l_attprojw, Some(l_attprojb), B, T, C, C);
             residual_forward(l_residual2, residual, l_attproj, B * T * C);
             layernorm_forward(
@@ -525,20 +526,45 @@ fn matmul_forward(
     // output channels
     OC: usize,
 ) {
-    for b in 0..B {
-        for t in 0..T {
-            let out_bt = &mut out[b * T * OC + t * OC..];
-            let inp_bt = &inp[b * T * C + t * C..];
-            for o in 0..OC {
-                let mut val = match bias {
-                    Some(bias) => bias[o],
-                    None => 0.0,
-                };
-                let wrow = &weight[o * C..];
-                for i in 0..C {
-                    val += wrow[i] * inp_bt[i];
+    let bias = match bias {
+        Some(bias) => bias,
+        None => &vec![0.0; OC],
+    };
+    #[cfg(not(feature = "noparallel"))]
+    {
+        let out_bt = (0..T).into_par_iter().flat_map(|t| {
+            (0..B)
+                .flat_map(move |b| {
+                    let inp_bt = &inp[b * T * C + t * C..];
+                    (0..OC).map(move |o| {
+                        let wrow = &weight[o * C..];
+                        wrow.iter()
+                            .take(C)
+                            .zip(inp_bt.iter())
+                            .map(|(&w, &i)| w * i)
+                            .sum::<f32>()
+                            + bias[o]
+                    })
+                })
+                .collect::<Vec<f32>>()
+        });
+        out[..T * B * OC].copy_from_slice(&out_bt.collect::<Vec<f32>>());
+    }
+
+    #[cfg(feature = "noparallel")]
+    {
+        for b in 0..B {
+            for t in 0..T {
+                let out_bt = &mut out[b * T * OC + t * OC..];
+                let inp_bt = &inp[b * T * C + t * C..];
+                for o in 0..OC {
+                    let mut val = bias[o];
+                    let wrow = &weight[o * C..];
+                    for i in 0..C {
+                        val += wrow[i] * inp_bt[i];
+                    }
+                    out_bt[o] = val;
                 }
-                out_bt[o] = val;
             }
         }
     }
