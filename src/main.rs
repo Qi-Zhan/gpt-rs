@@ -532,23 +532,23 @@ fn matmul_forward(
     };
     #[cfg(not(feature = "noparallel"))]
     {
-        let out_bt = (0..T).into_par_iter().flat_map(|t| {
-            (0..B)
-                .flat_map(move |b| {
+        let out_bt = (0..B)
+            .into_par_iter()
+            .flat_map(|b| {
+                (0..T).into_par_iter().flat_map(move |t| {
                     let inp_bt = &inp[b * T * C + t * C..];
-                    (0..OC).map(move |o| {
-                        let wrow = &weight[o * C..];
+                    (0..OC).into_par_iter().map(move |o| {
+                        let wrow = &weight[o * C..(o + 1) * C];
                         wrow.iter()
-                            .take(C)
                             .zip(inp_bt.iter())
                             .map(|(&w, &i)| w * i)
                             .sum::<f32>()
                             + bias[o]
                     })
                 })
-                .collect::<Vec<f32>>()
-        });
-        out[..T * B * OC].copy_from_slice(&out_bt.collect::<Vec<f32>>());
+            })
+            .collect::<Vec<f32>>();
+        out[..T * B * OC].copy_from_slice(&out_bt);
     }
 
     #[cfg(feature = "noparallel")]
