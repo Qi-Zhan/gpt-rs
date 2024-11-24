@@ -552,19 +552,17 @@ fn matmul_forward(
     }
 
     #[cfg(feature = "noparallel")]
-    {
-        for b in 0..B {
-            for t in 0..T {
-                let out_bt = &mut out[b * T * OC + t * OC..];
-                let inp_bt = &inp[b * T * C + t * C..];
-                for o in 0..OC {
-                    let mut val = bias[o];
-                    let wrow = &weight[o * C..];
-                    for i in 0..C {
-                        val += wrow[i] * inp_bt[i];
-                    }
-                    out_bt[o] = val;
+    for b in 0..B {
+        for t in 0..T {
+            let out_bt = &mut out[b * T * OC + t * OC..];
+            let inp_bt = &inp[b * T * C + t * C..];
+            for o in 0..OC {
+                let mut val = bias[o];
+                let wrow = &weight[o * C..];
+                for i in 0..C {
+                    val += wrow[i] * inp_bt[i];
                 }
+                out_bt[o] = val;
             }
         }
     }
