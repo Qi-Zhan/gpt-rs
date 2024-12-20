@@ -4,7 +4,7 @@ GPT-2 model inference implemented in (nearly) pure Rust.
 
 ## Usage
 
-Download the model from the [NJU GPT-2](https://box.nju.edu.cn/f/da66441d8c6d48d6b848/) and extract it to the current directory.
+Download the model from [here](gpt2_124M.bin) and move it to the current directory.
 
 ```shell
 cargo run --release "Ladies and"
